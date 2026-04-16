@@ -1,6 +1,5 @@
 # 🚨 FWA Detection System
-# RxHCC FWA Detection System — Hackathon Completion Report
-
+# RxHCC FWA Detection System
 > **Status**: Complete  
 > **Project**: RxHCC FWA Detection System (AWS Healthcare FWA Hackathon)  
 > **Author**: SECHA (sechan9999)  
@@ -685,8 +684,8 @@ Close: Insurance companies don't need smarter rules—they need smarter machines
 ---
 
 **Report Generated**: 2026-04-16  
-**Author**: SECHA (sechan9999)  
-**Email**: tcgyver@gmail.com  
+**Author**: sechan9999  
+**Email**: hkchun18@gmail.com  
 **Project**: RxHCC FWA Detection System  
 **Track**: Machine Learning / Healthcare Fraud Detection
 
