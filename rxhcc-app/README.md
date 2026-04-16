@@ -1,7 +1,14 @@
 # RxHCC Fraud Detection System
-### Powered by Amazon Nova AI
+### Powered by Amazon Nova AI + AutoResearch by @karpathy
 
-A production-grade **Healthcare Fraud, Waste & Abuse (FWA) Detection** dashboard built with React + Vite. It combines clinical rule-based analysis (ICD-10, NDC, HCC codes) with Amazon Nova AI for intelligent claim investigation.
+A production-grade **Healthcare Fraud, Waste & Abuse (FWA) Detection** dashboard built with React + Vite. It combines clinical rule-based analysis (ICD-10, NDC, HCC codes) with Amazon Nova AI for intelligent claim investigation — and an autonomous **AutoResearch loop** that self-improves the rule engine overnight.
+
+## 🌐 Live Demo
+
+| Deployment | URL |
+|------------|-----|
+| **Primary** | [hcendgame-fwa.vercel.app](https://hcendgame-fwa.vercel.app/) |
+| Mirror | [rxhcc-app.vercel.app](https://rxhcc-app.vercel.app/) |
 
 ---
 
@@ -14,6 +21,26 @@ A production-grade **Healthcare Fraud, Waste & Abuse (FWA) Detection** dashboard
 | 🕸️ **Network Graph** | Detect provider relationships, hub providers, doctor shopping |
 | 📅 **Temporal Analysis** | SVG bar chart with monthly anomaly spike detection |
 | 🤖 **AI Investigator** | Natural-language query interface with structured AI results |
+| 🧪 **AutoResearch** | Autonomous rule improvement loop — inspired by [@karpathy/autoresearch](https://github.com/karpathy/autoresearch) |
+
+---
+
+## 🧪 AutoResearch — LOOP FOREVER
+
+Modeled after [Karpathy's autoresearch](https://github.com/karpathy/autoresearch): an AI agent proposes new fraud detection rules, evaluates F1 score on 500 synthetic claims, and keeps or reverts — indefinitely.
+
+> *"One day, insurance fraud used to be caught by meat computers reviewing stacks of claims between coffee breaks and department meetings. That era is long gone."* — adapted from @karpathy, March 2026
+
+| Experiment | Rule | Status | F1 Delta |
+|-----------|------|--------|----------|
+| baseline | NDC mismatch + HCC + duplicate | keep | — |
+| exp01 | SPECIALTY_MISMATCH | keep | +0.031 |
+| exp03 | DUAL_GLP1_BILLING | keep | +0.017 |
+| exp05 | DOCTOR_SHOPPING_NETWORK | keep | +0.026 |
+| exp06 | POS_MISMATCH | keep | +0.015 |
+| exp08 | QUANTITY_LIMIT_VIOLATION | keep | +0.010 |
+| exp10 | TEMPORAL_CLUSTERING | keep | +0.016 |
+| **Best F1** | | | **0.878** |
 
 ---
 
@@ -60,8 +87,8 @@ def handler(event, context):
 
 ```bash
 # Clone the repository
-git clone https://github.com/sechan9999/RxHccNova.git
-cd RxHccNova
+git clone https://github.com/sechan9999/HCendGame.git
+cd HCendGame
 
 # Install dependencies
 npm install
@@ -125,4 +152,5 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-*Built for the AWS Healthcare FWA Hackathon · Amazon Nova Integration Demo*
+*Built for the AWS Healthcare FWA Hackathon · Amazon Nova Integration Demo*  
+*AutoResearch loop inspired by [@karpathy/autoresearch](https://github.com/karpathy/autoresearch)*
