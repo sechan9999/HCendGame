@@ -1,156 +1,69 @@
-# RxHCC Fraud Detection System
-### Powered by Amazon Nova AI + AutoResearch by @karpathy
+# RxHCC FWA Detection System
 
-A production-grade **Healthcare Fraud, Waste & Abuse (FWA) Detection** dashboard built with React + Vite. It combines clinical rule-based analysis (ICD-10, NDC, HCC codes) with Amazon Nova AI for intelligent claim investigation — and an autonomous **AutoResearch loop** that self-improves the rule engine overnight.
+**Live:** [hcendgame-fwa.vercel.app](https://hcendgame-fwa.vercel.app/)  
+**Repo:** [github.com/sechan9999/HCendGame](https://github.com/sechan9999/HCendGame)
 
-## 🌐 Live Demo
-
-| Deployment | URL |
-|------------|-----|
-| **Primary** | [hcendgame-fwa.vercel.app](https://hcendgame-fwa.vercel.app/) |
-| Mirror | [rxhcc-app.vercel.app](https://rxhcc-app.vercel.app/) |
+AI-powered **Healthcare Fraud, Waste & Abuse (FWA)** detection combining a clinical rule engine with **Amazon Nova Pro** and an autonomous **AutoResearch loop** modeled after [@karpathy/autoresearch](https://github.com/karpathy/autoresearch).
 
 ---
 
-## ✨ Features
+## What It Does
 
-| Tab | Feature |
-|-----|---------|
-| 🔍 **Single Claim** | Analyze individual claims across 5 fraud scenarios |
-| 📊 **Batch Analysis** | Generate & analyze 500 synthetic claims (15% anomaly rate) |
-| 🕸️ **Network Graph** | Detect provider relationships, hub providers, doctor shopping |
-| 📅 **Temporal Analysis** | SVG bar chart with monthly anomaly spike detection |
-| 🤖 **AI Investigator** | Natural-language query interface with structured AI results |
-| 🧪 **AutoResearch** | Autonomous rule improvement loop — inspired by [@karpathy/autoresearch](https://github.com/karpathy/autoresearch) |
+Healthcare fraud costs the US **$100–300 billion annually**. This system detects three categories in real time:
+
+- **Fraud** — intentional deception (e.g., Keytruda billed without cancer diagnosis)
+- **Waste** — overutilization (e.g., Ozempic prescribed for hypertension-only patients)
+- **Abuse** — inconsistent practices (e.g., HCC upcoding to inflate risk scores)
 
 ---
 
-## 🧪 AutoResearch — LOOP FOREVER
+## 6 Modules
 
-Modeled after [Karpathy's autoresearch](https://github.com/karpathy/autoresearch): an AI agent proposes new fraud detection rules, evaluates F1 score on 500 synthetic claims, and keeps or reverts — indefinitely.
-
-> *"One day, insurance fraud used to be caught by meat computers reviewing stacks of claims between coffee breaks and department meetings. That era is long gone."* — adapted from @karpathy, March 2026
-
-| Experiment | Rule | Status | F1 Delta |
-|-----------|------|--------|----------|
-| baseline | NDC mismatch + HCC + duplicate | keep | — |
-| exp01 | SPECIALTY_MISMATCH | keep | +0.031 |
-| exp03 | DUAL_GLP1_BILLING | keep | +0.017 |
-| exp05 | DOCTOR_SHOPPING_NETWORK | keep | +0.026 |
-| exp06 | POS_MISMATCH | keep | +0.015 |
-| exp08 | QUANTITY_LIMIT_VIOLATION | keep | +0.010 |
-| exp10 | TEMPORAL_CLUSTERING | keep | +0.016 |
-| **Best F1** | | | **0.878** |
+| Tab | Description |
+|-----|-------------|
+| 🔍 Single Claim | Real-time validation across 5 fraud scenarios |
+| 📊 Batch Analysis | 500 synthetic claims, 15% planted anomaly rate |
+| 🕸️ Network Graph | Kickback rings, hub providers, doctor-shopping detection |
+| 📅 Temporal Analysis | Monthly billing spike detection (SVG chart, no dependencies) |
+| 🤖 AI Investigator | Natural-language queries → structured evidence briefs |
+| 🧪 AutoResearch | Autonomous rule improvement loop — best F1: **0.878** |
 
 ---
 
-## 🛡️ Clinical Rule Engine
+## AutoResearch Loop
 
-- **ICD-10 Codes** — Validates diagnosis coverage
-- **NDC Drug Codes** — Cross-checks drug-indication matching (GLP-1, Keytruda, etc.)
-- **HCC Risk Scores** — Flags upcoding when combined score > 1.5
-- **Duplicate Billing Detection** — Catches repeated NDC codes in single claims
+> *"One day, insurance fraud used to be caught by meat computers reviewing stacks of claims between coffee breaks and department meetings. That era is long gone."*  
+> — adapted from @karpathy, March 2026
 
----
+The **AutoResearch** tab runs Karpathy's `LOOP FOREVER` methodology on the FWA rule engine:
 
-## 🤖 Amazon Nova Integration
+1. Agent proposes a new detection rule
+2. Validates on 500 synthetic claims
+3. If F1 improves → **keep** the commit
+4. If equal or worse → `git reset --hard HEAD~1` (**discard**)
+5. Repeat indefinitely
 
-The app connects to **Amazon Nova Pro** via API Gateway + Lambda + Bedrock proxy.
-
-**Without an endpoint** → operates in full **Rule-Based Mode** with simulated AI responses.  
-**With an endpoint** → routes prompts to `amazon.nova-pro-v1:0` for real clinical AI analysis.
-
-### API Gateway Setup (Optional)
-Deploy this Lambda behind API Gateway:
-```python
-import boto3, json
-
-def handler(event, context):
-    bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
-    body = json.loads(event['body'])
-    response = bedrock.converse(
-        modelId=body.get('modelId', 'amazon.nova-pro-v1:0'),
-        messages=body['messages'],
-        system=body.get('system', []),
-        inferenceConfig=body.get('inferenceConfig', {'maxTokens': 1024})
-    )
-    return {
-        'statusCode': 200,
-        'headers': {'Access-Control-Allow-Origin': '*'},
-        'body': json.dumps(response)
-    }
-```
+Click **Loop All** to watch it run autonomously. Click **Stop Loop** to halt.
 
 ---
 
-## 🚀 Quick Start
+## Tech Stack
+
+React 19 · Vite 7 · Tailwind CSS 3 · Amazon Nova Pro (Bedrock) · Inline SVG · Zero test-script dependencies
+
+---
+
+## Quick Start
 
 ```bash
-# Clone the repository
 git clone https://github.com/sechan9999/HCendGame.git
 cd HCendGame
-
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
 ```
 
-Open **http://localhost:5173** in your browser.
+Open [localhost:5173](http://localhost:5173). No API key required — runs in Rule-Based Mode by default.
 
 ---
 
-## ⚙️ Configuration
-
-In the app, click ⚙️ **Settings** in the top-right to enter your API endpoint:
-
-```
-https://your-api-gateway.execute-api.us-east-1.amazonaws.com/prod/invoke
-```
-
-Leave blank to use Rule-Based Mode (no AWS required).
-
----
-
-## 🏗️ Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19 + Vite 7 |
-| Styling | Tailwind CSS 3 |
-| Icons | Lucide React |
-| Charts | Inline SVG |
-| AI Backend | Amazon Nova Pro (via Bedrock) |
-| Deployment | Vite dev server / `npm run build` |
-
----
-
-## 📁 Project Structure
-
-```
-src/
-├── RXHCCnva.jsx    # Main component (all tabs, rule engine, AI calls)
-├── App.jsx          # Root wrapper
-├── main.jsx         # Entry point
-└── index.css        # Tailwind directives + global styles
-```
-
----
-
-## ⚠️ Security Notes
-
-- **No API keys are stored** in the source code
-- The Amazon Nova endpoint URL is entered at runtime via the Settings panel (not persisted)
-- All claim data shown is **synthetic / simulated** — no real patient data is used
-
----
-
-## 📄 License
-
-MIT License — see [LICENSE](LICENSE) for details.
-
----
-
-*Built for the AWS Healthcare FWA Hackathon · Amazon Nova Integration Demo*  
-*AutoResearch loop inspired by [@karpathy/autoresearch](https://github.com/karpathy/autoresearch)*
+*AWS Healthcare FWA Hackathon · Amazon Nova Integration*
