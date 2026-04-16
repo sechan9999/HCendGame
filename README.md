@@ -2,7 +2,7 @@
 # RxHCC FWA Detection System
 > **Status**: Complete  
 > **Project**: RxHCC FWA Detection System (AWS Healthcare FWA Hackathon)  
-> **Author**: SECHA (sechan9999)  
+> **Author**: sechan9999  
 > **Completion Date**: 2026-04-16  
 > **Track**: Machine Learning / Healthcare Fraud Detection  
 
