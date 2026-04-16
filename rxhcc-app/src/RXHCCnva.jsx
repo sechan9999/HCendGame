@@ -47,7 +47,7 @@ const HCC_RISK_SCORES = {
 // ============================================================================
 // AUTORESEARCH - Autonomous Rule Improvement Experiments
 // ============================================================================
-// Each entry = one autonomous iteration: propose rule â†’ run eval â†’ keep/discard
+// Each entry = one autonomous iteration: propose rule → run eval → keep/discard
 // This mirrors the autoresearch program.md loop applied to FWA detection.
 
 const AUTORESEARCH_EXPERIMENTS = [
@@ -94,7 +94,7 @@ const AUTORESEARCH_EXPERIMENTS = [
     f1: 0.808, precision: 0.863, recall: 0.760,
     memoryMb: 0.1, status: 'discard', delta: 0.000,
     ruleAdded: 'DEC_HCC_SPIKE',
-    log: 'F1 unchanged (0.000 delta). Synthetic data lacks seasonal signal. Rule adds 15 lines with no gain. Simplicity criterion â†’ discard.',
+    log: 'F1 unchanged (0.000 delta). Synthetic data lacks seasonal signal. Rule adds 15 lines with no gain. Simplicity criterion → discard.',
   },
   {
     id: 'exp05',
@@ -103,7 +103,7 @@ const AUTORESEARCH_EXPERIMENTS = [
     f1: 0.834, precision: 0.871, recall: 0.800,
     memoryMb: 0.5, status: 'keep', delta: +0.026,
     ruleAdded: 'DOCTOR_SHOPPING_NETWORK',
-    log: 'F1 improved +0.026. Recall jumped from 0.760â†’0.800 catching cross-provider shopping. Memory up 0.5MB (acceptable). Keeping.',
+    log: 'F1 improved +0.026. Recall jumped from 0.760→0.800 catching cross-provider shopping. Memory up 0.5MB (acceptable). Keeping.',
   },
   {
     id: 'exp06',
@@ -122,6 +122,33 @@ const AUTORESEARCH_EXPERIMENTS = [
     memoryMb: 0.2, status: 'keep', delta: +0.003,
     ruleAdded: 'CASCADE_BILLING',
     log: 'F1 improved +0.003. Small gain but rule is elegant and catches real-world pattern. Simplicity cost low (10 lines). Keeping.',
+  },
+  {
+    id: 'exp08',
+    commit: 'i8j1k02',
+    description: 'Add quantity limit violation: NDC days-supply exceeds clinical maximum for diagnosis',
+    f1: 0.862, precision: 0.887, recall: 0.838,
+    memoryMb: 0.1, status: 'keep', delta: +0.010,
+    ruleAdded: 'QUANTITY_LIMIT_VIOLATION',
+    log: 'F1 improved +0.010. Catches over-dispensing patterns in 12 clean lines. No new FP. Keeping.',
+  },
+  {
+    id: 'exp09',
+    commit: 'j9k2l13',
+    description: 'Loosen outlier billing multiplier 3x → 4x to reduce false positives on specialty drugs',
+    f1: 0.855, precision: 0.896, recall: 0.819,
+    memoryMb: 0, status: 'discard', delta: -0.007,
+    ruleAdded: 'OUTLIER_THRESHOLD_LOOSEN',
+    log: 'F1 dropped -0.007. Recall fell 0.838→0.819 — too many missed real cases. Reverting to 3x.',
+  },
+  {
+    id: 'exp10',
+    commit: 'k0l3m24',
+    description: 'Add temporal clustering: flag same patient billed >3× in 30-day window by one provider',
+    f1: 0.878, precision: 0.895, recall: 0.862,
+    memoryMb: 0.8, status: 'keep', delta: +0.016,
+    ruleAdded: 'TEMPORAL_CLUSTERING',
+    log: 'F1 improved +0.016. Recall 0.838→0.862 catching overutilization bursts. 0.8 MB date index — worth it. Keeping.',
   },
 ];
 
@@ -528,6 +555,57 @@ export default function RxHCCFraudDetection() {
   const [arCurrentIdx, setArCurrentIdx] = useState(2);
   const [arLog, setArLog] = useState([]);
   const arTimerRef = useRef(null);
+  const [arAutoLoop, setArAutoLoop] = useState(false);
+  const arAutoLoopRef = useRef(false);
+
+  // AutoResearch: shared experiment runner — enables both manual and auto-loop modes
+  const runArExperiment = useCallback((idx) => {
+    const exp = AUTORESEARCH_EXPERIMENTS[idx];
+    if (!exp) return;
+    setArRunning(true);
+    setArLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] $ git checkout autoresearch/apr16`]);
+    setTimeout(() => {
+      setArLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] Editing engine/rules.py → ${exp.ruleAdded || 'param_tune'}`]);
+    }, 400);
+    setTimeout(() => {
+      setArLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] $ python validate.py --claims 500 > run.log 2>&1`]);
+    }, 900);
+    setTimeout(() => {
+      setArLog(prev => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] precision:   ${exp.precision.toFixed(4)}`,
+        `[${new Date().toLocaleTimeString()}] recall:      ${exp.recall.toFixed(4)}`,
+        `[${new Date().toLocaleTimeString()}] f1:          ${exp.f1.toFixed(4)}`,
+        `[${new Date().toLocaleTimeString()}] claims_eval: 500`,
+      ]);
+    }, 1800);
+    setTimeout(() => {
+      const verdict = exp.status === 'keep'
+        ? `✅ f1 ${exp.delta > 0 ? '+' : ''}${(exp.delta || 0).toFixed(3)} → KEEPING — commit ${exp.commit}`
+        : exp.delta === 0
+          ? `— f1 ±0.000 → simplicity criterion → git reset --hard HEAD~1`
+          : `❌ f1 ${(exp.delta || 0).toFixed(3)} → DISCARDING → git reset --hard HEAD~1`;
+      setArLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${verdict}`]);
+      setArVisible(prev => [...prev, exp]);
+      setArCurrentIdx(idx);
+      setArRunning(false);
+    }, 3200);
+  }, []);
+
+  // AutoResearch LOOP FOREVER: advance automatically after each experiment when arAutoLoop is active
+  useEffect(() => {
+    if (!arAutoLoop || arRunning) return;
+    const nextIdx = arCurrentIdx + 1;
+    if (nextIdx >= AUTORESEARCH_EXPERIMENTS.length) {
+      arAutoLoopRef.current = false;
+      setArAutoLoop(false);
+      return;
+    }
+    const t = setTimeout(() => {
+      if (arAutoLoopRef.current) runArExperiment(nextIdx);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [arCurrentIdx, arAutoLoop, arRunning, runArExperiment]);
 
   // Amazon Nova API call
   const callNovaAPI = async (prompt, systemPrompt = '') => {
@@ -792,7 +870,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-violet-400">RxHCC</span>
                   <span className="text-slate-300 ml-2">Fraud Detection</span>
                 </h1>
-                <p className="text-sm text-slate-500">Healthcare FWA Detection System â€¢ Powered by Amazon Nova</p>
+                <p className="text-sm text-slate-500">Healthcare FWA Detection System • Powered by Amazon Nova</p>
               </div>
             </div>
 
@@ -1057,7 +1135,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                         <ul className="space-y-1">
                           {aiAnalysis.clinicalEvidence.map((e, i) => (
                             <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                              <span className="text-cyan-400 mt-0.5">â€¢</span>
+                              <span className="text-cyan-400 mt-0.5">•</span>
                               {e}
                             </li>
                           ))}
@@ -1343,7 +1421,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                         <div key={i} className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/30">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="text-slate-200">{c.provider1Name}</span>
-                            <span className="text-orange-400">â†”</span>
+                            <span className="text-orange-400">↔</span>
                             <span className="text-slate-200">{c.provider2Name}</span>
                           </div>
                           <div className="flex gap-4 text-sm">
@@ -1452,7 +1530,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                       <div>
                         <p className="text-sm font-semibold text-amber-300">Anomaly Spikes Detected</p>
                         <p className="text-sm text-slate-400 mt-0.5">
-                          {spikes.map(s => `${s.label} (${s.flagRate.toFixed(1)}% flag rate)`).join(' Â· ')}
+                          {spikes.map(s => `${s.label} (${s.flagRate.toFixed(1)}% flag rate)`).join(' · ')}
                         </p>
                       </div>
                     </div>
@@ -1515,7 +1593,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                               {isSpike && (
                                 <text x={x + BAR_W / 2} y={CHART_H - totalH - 6}
                                   textAnchor="middle" fill="#fbbf24" fontSize={11} fontWeight="bold">
-                                  âš 
+                                  ⚠️
                                 </text>
                               )}
                               {/* Month label */}
@@ -1551,7 +1629,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                         <span className="text-sm text-slate-400">Flagged Claims</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-amber-400 text-sm">âš </span>
+                        <span className="text-amber-400 text-sm">⚠️</span>
                         <span className="text-sm text-slate-400">Anomaly Spike (&gt;20% flag rate)</span>
                       </div>
                     </div>
@@ -1581,7 +1659,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                               <td className="py-2.5 pr-6 font-medium text-slate-200">
                                 {s.label}
                                 {s.flagRate > 20 && (
-                                  <span className="ml-2 text-xs text-amber-400">âš  spike</span>
+                                  <span className="ml-2 text-xs text-amber-400">⚠️ spike</span>
                                 )}
                               </td>
                               <td className="py-2.5 pr-6 text-right text-slate-300">{s.total}</td>
@@ -1735,7 +1813,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                         parsedInvestigation.recommendedAction === 'REVIEW' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' :
                           'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                         }`}>
-                        â†’ {parsedInvestigation.recommendedAction}
+                        → {parsedInvestigation.recommendedAction}
                       </span>
                     )}
                   </div>
@@ -1835,28 +1913,24 @@ Provide a detailed, actionable response as a fraud investigator.`;
 
           const handleRunNext = () => {
             if (!nextExp || arRunning) return;
-            setArRunning(true);
-            setArLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ðŸ”¬ Launching experiment: ${nextExp.description}`]);
-            setTimeout(() => {
-              setArLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] âš™ï¸  Running validation on 500 synthetic claims...`]);
-            }, 800);
-            setTimeout(() => {
-              setArLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ðŸ“Š precision=${nextExp.precision.toFixed(4)} recall=${nextExp.recall.toFixed(4)} f1=${nextExp.f1.toFixed(4)}`]);
-            }, 1800);
-            setTimeout(() => {
-              const verdict = nextExp.status === 'keep'
-                ? `âœ… F1 improved ${nextExp.delta > 0 ? '+' : ''}${(nextExp.delta || 0).toFixed(3)} â†’ KEEPING commit ${nextExp.commit}`
-                : nextExp.delta === 0
-                  ? `âš–ï¸  F1 unchanged (0.000 delta) â€” simplicity criterion â†’ DISCARDING`
-                  : `âŒ F1 dropped ${(nextExp.delta || 0).toFixed(3)} â†’ REVERTING git reset --hard HEAD~1`;
-              setArLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${verdict}`]);
-              setArVisible(prev => [...prev, nextExp]);
-              setArCurrentIdx(nextIdx);
-              setArRunning(false);
-            }, 3200);
+            runArExperiment(nextIdx);
+          };
+
+          const handleLoopAll = () => {
+            if (arRunning || !nextExp) return;
+            arAutoLoopRef.current = true;
+            setArAutoLoop(true);
+            runArExperiment(nextIdx);
+          };
+
+          const handleStopLoop = () => {
+            arAutoLoopRef.current = false;
+            setArAutoLoop(false);
           };
 
           const handleReset = () => {
+            arAutoLoopRef.current = false;
+            setArAutoLoop(false);
             setArVisible(AUTORESEARCH_EXPERIMENTS.slice(0, 1));
             setArCurrentIdx(0);
             setArLog([]);
@@ -1865,41 +1939,92 @@ Provide a detailed, actionable response as a fraud investigator.`;
 
           return (
             <div className="space-y-6">
+              {/* Karpathy Quote */}
+              <div className="p-4 rounded-xl bg-violet-500/5 border border-violet-500/20 text-sm text-slate-400 leading-relaxed italic">
+                <span className="text-violet-300 not-italic font-semibold">"</span>
+                One day, insurance fraud used to be caught by meat computers reviewing stacks of claims between coffee breaks and department meetings. That era is long gone.
+                <span className="text-violet-300 not-italic font-semibold">"</span>
+                <span className="ml-2 not-italic text-xs text-slate-500">
+                  — adapted from{' '}
+                  <a href="https://github.com/karpathy/autoresearch" target="_blank" rel="noreferrer"
+                    className="text-violet-400 hover:text-violet-300 underline underline-offset-2">@karpathy</a>
+                  , March 2026
+                </span>
+              </div>
+
               {/* Header */}
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between flex-wrap gap-4">
                 <div>
                   <h2 className="text-xl font-semibold text-slate-200 flex items-center gap-2">
                     <FlaskConical className="w-6 h-6 text-violet-400" />
-                    AutoResearch â€” Autonomous FWA Rule Improvement
+                    AutoResearch — Autonomous FWA Rule Improvement
                   </h2>
                   <p className="text-slate-400 mt-1 text-sm">
-                    AI agent iteratively proposes new fraud detection rules, evaluates F1, and keeps or discards. Inspired by{' '}
-                    <a href="https://github.com/sechan9999/autoresearch" target="_blank" rel="noreferrer"
-                      className="text-violet-400 hover:text-violet-300 underline underline-offset-2">autoresearch</a>.
+                    AI agent proposes, validates, keeps or discards fraud rules — indefinitely. Loop modeled after{' '}
+                    <a href="https://github.com/karpathy/autoresearch" target="_blank" rel="noreferrer"
+                      className="text-violet-400 hover:text-violet-300 underline underline-offset-2">autoresearch by @karpathy</a>.
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <button
                     onClick={handleReset}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800/50 text-slate-400 text-sm hover:text-slate-200 hover:bg-slate-700/50 transition-colors"
                   >
                     <RefreshCw className="w-4 h-4" /> Reset
                   </button>
+                  {arAutoLoop ? (
+                    <button
+                      onClick={handleStopLoop}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 text-sm font-medium hover:bg-red-500/30 transition-colors"
+                    >
+                      <X className="w-4 h-4" /> Stop Loop
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleLoopAll}
+                      disabled={arRunning || !nextExp}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-500/20 border border-violet-500/40 text-violet-300 text-sm font-medium hover:bg-violet-500/30 transition-colors disabled:opacity-40"
+                    >
+                      <RefreshCw className="w-4 h-4" /> Loop All
+                    </button>
+                  )}
                   <button
                     onClick={handleRunNext}
                     disabled={arRunning || !nextExp}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 shadow-lg shadow-violet-500/20"
                   >
                     {arRunning ? (
-                      <><Loader2 className="w-4 h-4 animate-spin" />Running Experiment...</>
+                      <><Loader2 className="w-4 h-4 animate-spin" />Running...</>
                     ) : nextExp ? (
-                      <><Play className="w-4 h-4" />Run Next Experiment</>
+                      <><Play className="w-4 h-4" />Run Next</>
                     ) : (
-                      <><Check className="w-4 h-4" />All Experiments Done</>
+                      <><Check className="w-4 h-4" />All Done</>
                     )}
                   </button>
                 </div>
               </div>
+
+              {/* program.md — Collapsible Instruction Viewer */}
+              <details className="group rounded-xl bg-slate-900/50 border border-slate-700/40 overflow-hidden">
+                <summary className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-slate-400 hover:text-violet-400 transition-colors cursor-pointer list-none select-none">
+                  <GitBranch className="w-4 h-4 shrink-0" />
+                  <span>program.md — Agent Research Instructions (Karpathy Loop)</span>
+                  <ChevronDown className="w-4 h-4 ml-auto transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="px-4 pb-4 font-mono text-xs text-slate-400 space-y-1 leading-relaxed border-t border-slate-700/40 pt-3">
+                  <p className="text-violet-300 font-semibold mb-2">LOOP FOREVER:</p>
+                  <p>1. Review current <span className="text-cyan-300">engine/rules.py</span> — understand active rules</p>
+                  <p>2. Propose one experiment (new rule · threshold change · compound rule)</p>
+                  <p>3. <span className="text-emerald-300">$ git commit -m "experiment: &lt;description&gt;"</span></p>
+                  <p>4. <span className="text-cyan-300">$ python validate.py --claims 500 &gt; run.log 2&gt;&amp;1</span></p>
+                  <p>5. <span className="text-cyan-300">$ grep "f1=" run.log</span></p>
+                  <p>6. F1 improved → advance branch <span className="text-emerald-400 font-semibold">KEEP</span></p>
+                  <p>7. F1 equal or worse → <span className="text-amber-400">git reset --hard HEAD~1</span> <span className="text-amber-400 font-semibold">DISCARD</span></p>
+                  <p className="pt-2 text-slate-500">Metric: F1 Score (precision × recall harmonic mean) — higher is better.</p>
+                  <p className="text-slate-500">Simplicity criterion: zero gain + added complexity → always discard.</p>
+                  <p className="text-slate-500">NEVER STOP: agent runs indefinitely until the human interrupts it.</p>
+                </div>
+              </details>
 
               {/* KPI Row */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1917,13 +2042,20 @@ Provide a detailed, actionable response as a fraud investigator.`;
                     </div>
                   </div>
                 ))}
+                {arAutoLoop && (
+                  <div className="col-span-2 md:col-span-4 p-3 rounded-xl bg-violet-500/10 border border-violet-500/30 flex items-center gap-3">
+                    <Loader2 className="w-4 h-4 text-violet-400 animate-spin shrink-0" />
+                    <span className="text-xs font-semibold text-violet-300 uppercase tracking-wider">Loop Active</span>
+                    <span className="text-xs text-slate-400">— running indefinitely until stopped. Next experiment queued after current completes.</span>
+                  </div>
+                )}
               </div>
 
               {/* F1 Progress Chart */}
               <div className="p-6 rounded-2xl bg-slate-800/30 border border-slate-700/50">
                 <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-violet-400" />
-                  F1 Score Trajectory â€” Autonomous Experiment Loop
+                  F1 Score Trajectory — Autonomous Experiment Loop
                 </h3>
                 <div className="overflow-x-auto">
                   <svg width={chartW} height={chartH + 30} className="min-w-full" style={{ minWidth: chartW }}>
@@ -1962,7 +2094,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                     {bestExp && (
                       <text x={toX(f1Points.findIndex(e => e.id === bestExp.id))} y={toY(bestExp.f1) - 10}
                         textAnchor="middle" fill="#34d399" fontSize={10} fontWeight="bold">
-                        â˜… best
+                        ★ best
                       </text>
                     )}
                   </svg>
@@ -1977,7 +2109,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
               <div className="p-6 rounded-2xl bg-slate-800/30 border border-slate-700/50">
                 <h3 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
                   <GitBranch className="w-5 h-5 text-cyan-400" />
-                  results.tsv â€” Experiment History
+                   results.tsv — Experiment History
                 </h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm font-mono">
@@ -2000,7 +2132,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                           <td className="py-2 pr-3 text-right text-slate-400">{e.precision.toFixed(4)}</td>
                           <td className="py-2 pr-3 text-right text-slate-400">{e.recall.toFixed(4)}</td>
                           <td className={`py-2 pr-3 text-right font-semibold ${!e.delta ? 'text-slate-500' : e.delta > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {e.delta == null ? 'â€”' : e.delta > 0 ? `+${e.delta.toFixed(3)}` : e.delta.toFixed(3)}
+                            {e.delta == null ? '—' : e.delta > 0 ? `+${e.delta.toFixed(3)}` : e.delta.toFixed(3)}
                           </td>
                           <td className="py-2 pr-3">
                             <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${e.status === 'keep' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
@@ -2047,7 +2179,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                       <p className="text-slate-600 italic">No experiments run yet. Click "Run Next Experiment" to start the loop.</p>
                     ) : (
                       arLog.map((line, i) => (
-                        <p key={i} className={`${line.includes('âœ…') ? 'text-emerald-400' : line.includes('âŒ') ? 'text-red-400' : line.includes('âš–ï¸') ? 'text-amber-400' : line.includes('ðŸ“Š') ? 'text-cyan-300' : 'text-slate-400'}`}>
+                        <p key={i} className={`${line.includes('✅') ? 'text-emerald-400' : line.includes('❌') ? 'text-red-400' : line.includes('—') ? 'text-amber-400' : line.includes('📊') ? 'text-cyan-300' : 'text-slate-400'}`}>
                           {line}
                         </p>
                       ))
@@ -2071,7 +2203,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                   <div>
                     <p className="text-emerald-400 font-semibold">All Experiments Complete</p>
                     <p className="text-slate-400 text-sm mt-0.5">
-                      Best F1: <span className="text-emerald-400 font-mono font-bold">{bestF1.toFixed(4)}</span> â€” achieved by {bestExp?.description}
+                      Best F1: <span className="text-emerald-400 font-mono font-bold">{bestF1.toFixed(4)}</span> — achieved by {bestExp?.description}
                     </p>
                   </div>
                 </div>
@@ -2085,7 +2217,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
       <footer className="relative border-t border-slate-800/50 bg-slate-900/30 mt-12">
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between text-sm text-slate-500">
-            <p>RxHCC Fraud Detection System â€¢ Amazon Nova Integration</p>
+            <p>RxHCC Fraud Detection System • Amazon Nova Integration</p>
             <p>Healthcare FWA Detection Pipeline v2.0</p>
           </div>
         </div>
