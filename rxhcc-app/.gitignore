@@ -56,3 +56,4 @@ Thumbs.db
 vite.config.js.timestamp*
 
 .vercel
+mcp/node_modules/
