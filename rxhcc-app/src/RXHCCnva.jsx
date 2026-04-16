@@ -532,7 +532,7 @@ export default function RxHCCFraudDetection() {
   const [analysisResult, setAnalysisResult] = useState(null);
   const [aiAnalysis, setAiAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [apiEndpoint, setApiEndpoint] = useState('');
+  const [llmConfig, setLlmConfig] = useState({ provider: 'rule-based', baseUrl: '', apiKey: '', model: '' });
   const [showSettings, setShowSettings] = useState(false);
 
   // Batch analysis state
@@ -607,34 +607,42 @@ export default function RxHCCFraudDetection() {
     return () => clearTimeout(t);
   }, [arCurrentIdx, arAutoLoop, arRunning, runArExperiment]);
 
-  // Amazon Nova API call
-  const callNovaAPI = async (prompt, systemPrompt = '') => {
-    if (!apiEndpoint) {
-      // Fallback: Return simulated AI response
-      return simulateAIResponse(prompt);
-    }
+  // LLM call — OpenAI-compatible (Ollama / Groq / rule-based fallback)
+  const PROVIDER_DEFAULTS = {
+    ollama: { baseUrl: 'http://localhost:11434/v1', model: 'llama3', apiKey: 'ollama' },
+    groq:   { baseUrl: 'https://api.groq.com/openai/v1', model: 'llama3-8b-8192', apiKey: '' },
+  };
+
+  const callLLM = async (prompt, systemPrompt = '') => {
+    const { provider, baseUrl, apiKey, model } = llmConfig;
+    if (provider === 'rule-based') return simulateAIResponse(prompt);
+
+    const defaults = PROVIDER_DEFAULTS[provider] || {};
+    const url     = (baseUrl || defaults.baseUrl) + '/chat/completions';
+    const key     = apiKey  || defaults.apiKey;
+    const mdl     = model   || defaults.model;
 
     try {
-      const response = await fetch(apiEndpoint, {
+      const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(key && key !== 'ollama' ? { Authorization: `Bearer ${key}` } : {}),
+        },
         body: JSON.stringify({
-          modelId: 'amazon.nova-pro-v1:0',
+          model: mdl,
+          temperature: 0.3,
+          max_tokens: 1024,
           messages: [
-            { role: 'user', content: prompt }
+            { role: 'system', content: systemPrompt || 'You are a healthcare fraud investigator AI assistant.' },
+            { role: 'user',   content: prompt },
           ],
-          system: [{ text: systemPrompt || 'You are a healthcare fraud investigator AI assistant.' }],
-          inferenceConfig: {
-            maxTokens: 1024,
-            temperature: 0.3
-          }
-        })
+        }),
       });
-
       const data = await response.json();
-      return data.output?.message?.content?.[0]?.text || data.content || JSON.stringify(data);
+      return data.choices?.[0]?.message?.content || simulateAIResponse(prompt);
     } catch (error) {
-      console.error('Nova API Error:', error);
+      console.error('LLM Error:', error);
       return simulateAIResponse(prompt);
     }
   };
@@ -720,7 +728,7 @@ Risk Score: ${ruleResult.riskScore}
 Provide your analysis as JSON with: riskLevel, fraudProbability, recommendedAction, reasoning, clinicalEvidence (array), suggestedInvestigation`;
 
     try {
-      const response = await callNovaAPI(prompt, 'You are an expert healthcare fraud investigator. Analyze claims for FWA indicators.');
+      const response = await callLLM(prompt, 'You are an expert healthcare fraud investigator. Analyze claims for FWA indicators.');
       const parsed = JSON.parse(response);
       setAiAnalysis(parsed);
     } catch (e) {
@@ -783,7 +791,7 @@ Provider Network Analysis:
 Provide insights on: cross-claim patterns, provider network concerns, temporal anomalies, and priority investigation targets.`;
 
     try {
-      const response = await callNovaAPI(batchPrompt, 'You are a healthcare fraud analytics expert analyzing batch claims data.');
+      const response = await callLLM(batchPrompt, 'You are a healthcare fraud analytics expert analyzing batch claims data.');
       setBatchAiInsights(response);
     } catch (e) {
       setBatchAiInsights('AI analysis unavailable in demo mode. Enable Amazon Nova endpoint for full analysis.');
@@ -818,7 +826,7 @@ User Question: ${investigatorQuery}
 Provide a detailed, actionable response as a fraud investigator.`;
 
     try {
-      const response = await callNovaAPI(contextPrompt, 'You are an AI-powered SIU (Special Investigations Unit) analyst assistant.');
+      const response = await callLLM(contextPrompt, 'You are an AI-powered SIU (Special Investigations Unit) analyst assistant.');
       setInvestigatorResponse(response);
     } catch (e) {
       setInvestigatorResponse('Unable to process query. Please try again.');
@@ -870,14 +878,14 @@ Provide a detailed, actionable response as a fraud investigator.`;
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-violet-400">RxHCC</span>
                   <span className="text-slate-300 ml-2">Fraud Detection</span>
                 </h1>
-                <p className="text-sm text-slate-500">Healthcare FWA Detection System • Powered by Amazon Nova</p>
+                <p className="text-sm text-slate-500">Healthcare FWA Detection System • {llmConfig.provider === 'ollama' ? 'Powered by Ollama' : llmConfig.provider === 'groq' ? 'Powered by Groq' : 'Rule-Based Mode'}</p>
               </div>
             </div>
 
             <div className="flex items-center gap-4">
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${apiEndpoint ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                <div className={`w-2 h-2 rounded-full ${apiEndpoint ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
-                {apiEndpoint ? 'Nova API Connected' : 'Rule-Based Mode'}
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${llmConfig.provider !== 'rule-based' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                <div className={`w-2 h-2 rounded-full ${llmConfig.provider !== 'rule-based' ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
+                {llmConfig.provider === 'ollama' ? 'Ollama (local)' : llmConfig.provider === 'groq' ? 'Groq API' : 'Rule-Based Mode'}
               </div>
               <button
                 onClick={() => setShowSettings(!showSettings)}
@@ -893,26 +901,73 @@ Provide a detailed, actionable response as a fraud investigator.`;
       {/* Settings Panel */}
       {showSettings && (
         <div className="relative border-b border-slate-800/50 bg-slate-900/80 backdrop-blur-xl">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex items-center gap-4">
-              <label className="text-sm text-slate-400">Amazon Nova API Endpoint:</label>
-              <input
-                type="text"
-                value={apiEndpoint}
-                onChange={(e) => setApiEndpoint(e.target.value)}
-                placeholder="https://your-api-gateway.execute-api.region.amazonaws.com/prod/invoke"
-                className="flex-1 px-4 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50"
-              />
-              <button
-                onClick={() => setShowSettings(false)}
-                className="px-4 py-2 rounded-lg bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition-colors"
-              >
-                Save
+          <div className="max-w-7xl mx-auto px-6 py-5 space-y-3">
+            {/* Provider selector */}
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-slate-400 w-24 shrink-0">AI Provider</span>
+              {[
+                { id: 'rule-based', label: 'Rule-Based', sub: 'No LLM — free' },
+                { id: 'ollama',     label: 'Ollama',     sub: 'Local — free' },
+                { id: 'groq',       label: 'Groq API',   sub: 'Free cloud' },
+              ].map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setLlmConfig(c => ({ ...c, provider: p.id }))}
+                  className={`px-4 py-2 rounded-lg text-sm border transition-colors ${llmConfig.provider === p.id ? 'border-cyan-500 bg-cyan-500/10 text-cyan-300' : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-500'}`}
+                >
+                  <div className="font-medium">{p.label}</div>
+                  <div className="text-xs opacity-60">{p.sub}</div>
+                </button>
+              ))}
+            </div>
+
+            {/* Ollama config */}
+            {llmConfig.provider === 'ollama' && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-slate-400 w-24 shrink-0">Model</span>
+                <input
+                  type="text"
+                  value={llmConfig.model}
+                  onChange={e => setLlmConfig(c => ({ ...c, model: e.target.value }))}
+                  placeholder="llama3"
+                  className="w-48 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:border-cyan-500/50"
+                />
+                <span className="text-xs text-slate-500">Base URL: http://localhost:11434/v1 (auto)</span>
+              </div>
+            )}
+
+            {/* Groq config */}
+            {llmConfig.provider === 'groq' && (
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-sm text-slate-400 w-24 shrink-0">API Key</span>
+                <input
+                  type="password"
+                  value={llmConfig.apiKey}
+                  onChange={e => setLlmConfig(c => ({ ...c, apiKey: e.target.value }))}
+                  placeholder="gsk_..."
+                  className="w-64 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:border-cyan-500/50"
+                />
+                <input
+                  type="text"
+                  value={llmConfig.model}
+                  onChange={e => setLlmConfig(c => ({ ...c, model: e.target.value }))}
+                  placeholder="llama3-8b-8192"
+                  className="w-48 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:border-cyan-500/50"
+                />
+                <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:underline">Get free Groq key →</a>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-500">
+                {llmConfig.provider === 'rule-based' && 'Clinical rule engine only — no LLM needed. Works fully offline.'}
+                {llmConfig.provider === 'ollama'     && 'Requires Ollama running locally: brew install ollama && ollama pull llama3'}
+                {llmConfig.provider === 'groq'       && 'Free tier: 14,400 req/day on llama3-8b. Sign up at console.groq.com — no credit card.'}
+              </p>
+              <button onClick={() => setShowSettings(false)} className="px-4 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 text-sm transition-colors">
+                Done
               </button>
             </div>
-            <p className="mt-2 text-xs text-slate-500">
-              Deploy an API Gateway + Lambda proxy to Amazon Bedrock. Without an endpoint, the system operates in rule-based mode with simulated AI responses.
-            </p>
           </div>
         </div>
       )}

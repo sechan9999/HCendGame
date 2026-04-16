@@ -14,29 +14,48 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
+import OpenAI from "openai";
 
 import { validateClaim, batchAnalyze, getNetworkSignals } from "./rules/clinical.js";
-import { extractSharpContext, fetchFhirClaims, fhirMedRequestToClaim } from "./fhir/adapter.js";
+import { extractSharpContext, fetchFhirClaims } from "./fhir/adapter.js";
 
-// ── Bedrock client ─────────────────────────────────────────────────────────
-const bedrock = new BedrockRuntimeClient({
-  region: process.env.AWS_REGION || "us-east-1",
-  credentials: process.env.AWS_ACCESS_KEY_ID ? {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  } : undefined, // falls back to IAM role / AWS profile
+// ── LLM client — OpenAI-compatible (Ollama / Groq / any OpenAI-compatible API)
+// Provider selection via env vars:
+//   LLM_PROVIDER = ollama | groq | openai  (default: ollama)
+//   LLM_BASE_URL  — override base URL
+//   LLM_API_KEY   — API key (not needed for Ollama)
+//   LLM_MODEL     — model name override
+const PROVIDER_DEFAULTS = {
+  ollama: { baseURL: "http://localhost:11434/v1", apiKey: "ollama",  model: "llama3" },
+  groq:   { baseURL: "https://api.groq.com/openai/v1", apiKey: "",  model: "llama3-8b-8192" },
+  openai: { baseURL: "https://api.openai.com/v1",      apiKey: "",  model: "gpt-4o-mini" },
+};
+
+const provider = process.env.LLM_PROVIDER || "ollama";
+const defaults = PROVIDER_DEFAULTS[provider] || PROVIDER_DEFAULTS.ollama;
+
+const llm = new OpenAI({
+  baseURL: process.env.LLM_BASE_URL || defaults.baseURL,
+  apiKey:  process.env.LLM_API_KEY  || defaults.apiKey || "no-key",
 });
+const LLM_MODEL = process.env.LLM_MODEL || defaults.model;
 
-async function callNova(systemPrompt, userMessage) {
-  const cmd = new ConverseCommand({
-    modelId: "amazon.nova-pro-v1:0",
-    system: [{ text: systemPrompt }],
-    messages: [{ role: "user", content: [{ text: userMessage }] }],
-    inferenceConfig: { temperature: 0.3, maxTokens: 1024 },
-  });
-  const res = await bedrock.send(cmd);
-  return res.output?.message?.content?.[0]?.text || "";
+async function callLLM(systemPrompt, userMessage) {
+  try {
+    const res = await llm.chat.completions.create({
+      model: LLM_MODEL,
+      temperature: 0.3,
+      max_tokens: 1024,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user",   content: userMessage },
+      ],
+    });
+    return res.choices?.[0]?.message?.content || "";
+  } catch (err) {
+    console.error(`LLM error (${provider}):`, err.message);
+    return `{"error": "LLM unavailable — rule-based fallback active", "provider": "${provider}"}`;
+  }
 }
 
 // ── MCP Server ─────────────────────────────────────────────────────────────
@@ -137,7 +156,7 @@ Respond with a JSON object: { "summary": string, "risk_level": "HIGH|MEDIUM|LOW"
 Question: ${question}
 ${claimContext ? `Claim context:\n${claimContext}` : ""}`;
 
-    const raw = await callNova(systemPrompt, userMsg);
+    const raw = await callLLM(systemPrompt, userMsg);
     let parsed;
     try {
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -172,7 +191,7 @@ Current best F1: ${currentF1}
 Propose ONE new detection rule. Respond with JSON:
 { "rule_name": string, "rule_description": string, "icd10_pattern": string, "expected_f1": number, "rationale": string }`;
 
-    const raw = await callNova(systemPrompt, `Propose a new rule to improve F1 above ${currentF1} on ${sampleSize} synthetic claims.`);
+    const raw = await callLLM(systemPrompt, `Propose a new rule to improve F1 above ${currentF1} on ${sampleSize} synthetic claims.`);
 
     let proposal;
     try {
