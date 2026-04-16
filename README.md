@@ -685,7 +685,6 @@ Close: Insurance companies don't need smarter rules—they need smarter machines
 
 **Report Generated**: 2026-04-16  
 **Author**: sechan9999  
-**Email**: hkchun18@gmail.com  
 **Project**: RxHCC FWA Detection System  
 **Track**: Machine Learning / Healthcare Fraud Detection
 
