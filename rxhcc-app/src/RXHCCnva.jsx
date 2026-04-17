@@ -794,7 +794,7 @@ Provide insights on: cross-claim patterns, provider network concerns, temporal a
       const response = await callLLM(batchPrompt, 'You are a healthcare fraud analytics expert analyzing batch claims data.');
       setBatchAiInsights(response);
     } catch (e) {
-      setBatchAiInsights('AI analysis unavailable in demo mode. Enable Amazon Nova endpoint for full analysis.');
+      setBatchAiInsights('AI analysis unavailable in demo mode. Set OPENAI_API_KEY to enable GPT-4o full analysis.');
     }
 
     setIsBatchAnalyzing(false);
@@ -1156,7 +1156,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
                       <Brain className="w-5 h-5 text-violet-400" />
-                      Amazon Nova AI Analysis
+                      OpenAI GPT-4o Analysis
                     </h3>
                     <div className="flex items-center gap-3">
                       <span className={`px-3 py-1 rounded-full text-sm font-bold ${getRiskColor(aiAnalysis.riskLevel)}`}>
@@ -2272,7 +2272,7 @@ Provide a detailed, actionable response as a fraud investigator.`;
       <footer className="relative border-t border-slate-800/50 bg-slate-900/30 mt-12">
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between text-sm text-slate-500">
-            <p>RxHCC Fraud Detection System • Amazon Nova Integration</p>
+            <p>RxHCC Fraud Detection System • OpenAI GPT-4o Integration</p>
             <p>Healthcare FWA Detection Pipeline v2.0</p>
           </div>
         </div>
