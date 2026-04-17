@@ -63,6 +63,21 @@ const server = new McpServer({
   name: "hcendgame-fwa",
   version: "1.0.0",
   description: "Healthcare Fraud, Waste & Abuse detection with autonomous rule improvement (AutoResearch). Supports FHIR R4 and SHARP Extension Specs.",
+  capabilities: {
+    extensions: {
+      "ai.promptopinion/fhir-context": {
+        scopes: [
+          { name: "patient/Patient.rs",                  required: true },
+          { name: "patient/MedicationStatement.rs" },
+          { name: "patient/Condition.rs" },
+          { name: "patient/Observation.rs" },
+          { name: "patient/ExplanationOfBenefit.rs" },   // FWA claims data
+          { name: "patient/Coverage.rs" },               // payer/plan info
+        ],
+      },
+    },
+    tools: { listChanged: true },
+  },
 });
 
 // ── Tool: validate_claim ───────────────────────────────────────────────────
@@ -263,7 +278,49 @@ server.tool(
   }
 );
 
-// ── Start ──────────────────────────────────────────────────────────────────
-const transport = new StdioServerTransport();
-await server.connect(transport);
-console.error("HCendGame FWA MCP Server running — 6 tools active");
+// ── Transport — HTTP+SSE (Prompt Opinion) or Stdio (local/Claude Desktop) ──
+const USE_HTTP = process.env.MCP_HTTP === "1" || process.env.PORT;
+
+if (USE_HTTP) {
+  // HTTP + SSE transport for Prompt Opinion marketplace
+  const { StreamableHTTPServerTransport } = await import("@modelcontextprotocol/sdk/server/streamableHttp.js");
+  const { createServer } = await import("http");
+
+  const PORT = parseInt(process.env.PORT || "3000");
+  const sessions = new Map();
+
+  const httpServer = createServer(async (req, res) => {
+    // CORS for Prompt Opinion platform
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, x-sharp-patient-id, x-sharp-fhir-token, x-sharp-fhir-base-url");
+
+    if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
+
+    if (req.url === "/mcp" || req.url === "/") {
+      const sessionId = req.headers["mcp-session-id"] || crypto.randomUUID();
+      let transport = sessions.get(sessionId);
+      if (!transport) {
+        transport = new StreamableHTTPServerTransport({ sessionId });
+        sessions.set(sessionId, transport);
+        await server.connect(transport);
+      }
+      await transport.handleRequest(req, res);
+    } else if (req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", tools: 6, server: "hcendgame-fwa" }));
+    } else {
+      res.writeHead(404); res.end();
+    }
+  });
+
+  httpServer.listen(PORT, () => {
+    console.error(`HCendGame FWA MCP Server (HTTP+SSE) listening on :${PORT}/mcp`);
+    console.error("6 tools active — SHARP extension registered");
+  });
+} else {
+  // Stdio transport for local use / Claude Desktop
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error("HCendGame FWA MCP Server (stdio) running — 6 tools active");
+}
