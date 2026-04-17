@@ -1,12 +1,20 @@
 /**
- * HCendGame FWA Detection — MCP Server
+ * HCendGame FWA Detection — MCP Server (Local / Claude Desktop)
  * Prompt Opinion Agents Assemble Challenge (Superpower / MCP track)
  *
- * Tools exposed:
+ * NOTE: This file is for local use (stdio) or self-hosted HTTP+SSE.
+ * The Vercel production endpoint is at api/mcp.js which uses the low-level
+ * Server class (required for correct SHARP extension placement in Prompt Opinion).
+ *
+ * Tool differences vs api/mcp.js (intentional):
+ *   api/mcp.js (Vercel/Prompt Opinion): 5 tools — get_patient_fwa_summary
+ *   mcp/server.js (local):              6 tools — get_provider_network + fetch_fhir_claims
+ *
+ * Tools exposed here:
  *   validate_claim          — single claim FWA check
  *   batch_analyze           — bulk claim analysis
  *   get_provider_network    — kickback ring / hub detection
- *   run_autoresearch        — one AutoResearch iteration via Nova Pro
+ *   run_autoresearch        — one AutoResearch iteration (OpenAI-compatible LLM)
  *   query_investigator      — natural-language → evidence brief
  *   fetch_fhir_claims       — pull + analyze claims from FHIR server (SHARP)
  */

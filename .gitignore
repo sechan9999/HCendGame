@@ -63,3 +63,4 @@ quicksight_manifest.json
 # Temporary files
 *.tmp
 *.bak
+_archive/byul-market-news/

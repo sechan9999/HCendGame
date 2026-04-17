@@ -18,7 +18,7 @@
 | **Tagline** | "We gave AI a stethoscope, a badge, and a rule book — and told it never to stop." |
 | **Primary URL** | https://hcendgame-fwa.vercel.app/ |
 | **Mirror URL** | https://rxhcc-app.vercel.app/ |
-| **Tech Stack** | React 19 · Vite 7 · Tailwind CSS 3 · Amazon Nova Pro (Bedrock) · Inline SVG |
+| **Tech Stack** | React 19 · Vite 7 · Tailwind CSS 3 · OpenAI-compatible LLM (Ollama/Groq/rule-based) · Inline SVG |
 | **Repositories** | sechan9999/HCendGame · sechan9999/FWAhackerthon4 |
 | **Duration** | Hackathon sprint (final integration phase) |
 
@@ -504,7 +504,7 @@ Intro: "Healthcare fraud costs America $68 billion annually. Detecting it requir
 
 Problem: Traditional fraud detection rules miss 30% of claims. Insurance companies hire teams of analysts manually reviewing patterns. It's slow, error-prone, and misses emerging schemes.
 
-Solution: Our system combines Amazon Nova Pro LLM with continuous AutoResearch—a machine learning pipeline that automatically discovers new fraud patterns. Instead of waiting for auditors to notice patterns, our AI runs 50+ experiments per day, learning what to catch.
+Solution: Our system combines an OpenAI-compatible LLM (Ollama/Groq, with rule-based fallback) with continuous AutoResearch—a machine learning pipeline that automatically discovers new fraud patterns. Instead of waiting for auditors to notice patterns, our AI runs 50+ experiments per day, learning what to catch.
 
 Demo: Watch our system analyze a prescription claim in real-time. It runs rule checks (QUANTITY_LIMIT_VIOLATION, TEMPORAL_CLUSTERING), scores risk, and flags high-confidence fraud. F1 score: 0.878. In plain terms: catches 88% of fraud while false-alarming only 1 in 10 legitimate claims.
 
@@ -513,7 +513,7 @@ Close: Insurance companies don't need smarter rules—they need smarter machines
 ### 10.3 One-Liner Variants
 
 **For technical judges**:
-"AutoResearch-driven fraud detection pipeline with F1=0.878 trained on Healthcare CMS patterns via Amazon Nova Pro, deployed full-stack on React/Vite with autonomous experimentation loop."
+"AutoResearch-driven fraud detection pipeline with F1=0.878 trained on Healthcare CMS patterns, deployed full-stack on React/Vite with autonomous experimentation loop and OpenAI-compatible LLM support."
 
 **For business judges**:
 "AI-powered fraud detection SaaS reducing audit costs by 80% while improving catch rate to 88% (F1=0.878)—deployed to production, ready for health plan integration."
@@ -533,8 +533,8 @@ Close: Insurance companies don't need smarter rules—they need smarter machines
 ```
 [✅] No console.error() or TODOs in production code
 [✅] All secrets in environment variables (no hardcoded credentials)
-[✅] Error boundaries present for Bedrock API failures
-[✅] Graceful degradation if AWS Lambda unavailable
+[✅] Error boundaries present for LLM API failures
+[✅] Graceful degradation if LLM unavailable (rule-based fallback)
 [✅] Input validation on claim data (Zod schemas optional, not critical)
 [✅] No memory leaks in useEffect hooks
 [✅] Unused imports removed
@@ -625,7 +625,7 @@ Close: Insurance companies don't need smarter rules—they need smarter machines
 ### 13.3 Source Material Attribution
 
 - **Karpathy AutoResearch**: https://github.com/karpathy/autoresearch
-- **AWS Nova Pro**: Amazon Bedrock LLM service
+- **OpenAI-compatible LLM**: Ollama (local), Groq (cloud), or rule-based fallback
 - **React 19**: Latest React framework
 - **Vite 7**: Modern build tooling
 
